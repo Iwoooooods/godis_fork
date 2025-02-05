@@ -91,8 +91,9 @@ func (m *ShardedMap) Get(key string) (any, bool) {
 
 	shard.mu.RLock()
 	defer shard.mu.RUnlock()
-	val, exists := shard.m[key]
-	return val, exists
+	val, ok := shard.m[key]
+
+	return val, ok
 }
 
 func (m *ShardedMap) Len() int {

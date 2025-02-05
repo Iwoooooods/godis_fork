@@ -9,7 +9,6 @@ import (
 )
 
 type Redis struct {
-	// Add ShardedMap for data storage
 	data *ds.ShardedMap
 }
 
@@ -20,7 +19,7 @@ func NewStandAloneDb() *Redis {
 }
 
 func (r *Redis) Close() {
-	// Clean up resources if needed
+	// Clean up
 }
 
 func (r *Redis) Exec(conn interfaces.Connection, cmdL [][]byte) protocol.Reply {
@@ -28,10 +27,9 @@ func (r *Redis) Exec(conn interfaces.Connection, cmdL [][]byte) protocol.Reply {
 		return protocol.MakeErrReply("ERR empty command")
 	}
 
-	// Get command name and convert to lowercase
+	// commands are case-insensitive
 	cmdName := strings.ToLower(string(cmdL[0]))
 
-	// Look up command in registry
 	cmd, ok := CommandMap[cmdName]
 	if !ok {
 		log.Printf("ERR unknown command '%s'", cmdName)
