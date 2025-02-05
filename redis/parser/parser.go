@@ -88,7 +88,6 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 			}
 		default:
 			args := bytes.Split(line, []byte{' '})
-			log.Print(args)
 			ch <- &Payload{
 				Data: protocol.MakeMultiBulkReply(args),
 			}

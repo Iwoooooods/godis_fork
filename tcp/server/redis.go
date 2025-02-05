@@ -62,9 +62,9 @@ func (r *RedisHandler) HandleF(ctx context.Context, conn net.Conn) {
 	client := client.NewConn(conn)
 	r.activeConn.Store(client, struct{}{})
 
-	resultCh := parser.ParseStream(conn)
+	payloadCh := parser.ParseStream(conn)
 
-	for payload := range resultCh {
+	for payload := range payloadCh {
 
 		if payload.Err != nil {
 			if payload.Err == io.EOF ||

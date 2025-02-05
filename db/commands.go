@@ -13,6 +13,16 @@ import (
 // CommandMap is initialized when package loaded
 var CommandMap = make(map[string]*cmd)
 
+const (
+	TypeString = iota
+	TypeList
+)
+
+type DataEntity struct {
+	Type  int
+	Value interface{}
+}
+
 type cmd struct {
 	name     string
 	executor ExecF
@@ -39,40 +49,6 @@ func Ping(db interfaces.DB, args [][]byte) protocol.Reply {
 	} else {
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'ping' command")
 	}
-}
-
-func Set(db interfaces.DB, args [][]byte) protocol.Reply {
-	if len(args) != 2 {
-		return protocol.MakeErrReply("ERR wrong number of arguments for 'set' command")
-	}
-
-	key := string(args[0])
-	value := args[1]
-
-	redis, _ := db.(*Redis)
-	redis.data.Put(key, value)
-
-	return protocol.MakeOkReply()
-}
-
-func Get(db interfaces.DB, args [][]byte) protocol.Reply {
-	if len(args) != 1 {
-		return protocol.MakeErrReply("ERR wrong number of arguments for 'get' command")
-	}
-
-	key := string(args[0])
-	redis, ok := db.(*Redis)
-	if !ok {
-		return protocol.MakeErrReply("ERR incorrect db type")
-	}
-	val, ok := redis.data.Get(key)
-	if !ok {
-		log.Printf("key %s not exists", key)
-		return protocol.MakeNullBulkReply()
-	}
-	valBytes := val.([]byte)
-
-	return protocol.MakeBulkReply(valBytes)
 }
 
 // DEL could delete one or more keys from the db
@@ -112,7 +88,18 @@ func Del(db interfaces.DB, args [][]byte) protocol.Reply {
 // init() will be called before main() after the package is loaded
 func init() {
 	Register("PING", Ping)
+	Register("DEL", Del)
+
+	// string commands
 	Register("SET", Set)
 	Register("GET", Get)
-	Register("DEL", Del)
+
+	// list commands
+	Register("LPUSH", LPush)
+	Register("RPUSH", RPush)
+	Register("LPOP", LPop)
+	Register("RPOP", RPop)
+	Register("LLEN", LLen)
+	Register("LINDEX", LIndex)
+	Register("LRANGE", LRange)
 }
