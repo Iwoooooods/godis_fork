@@ -3,13 +3,14 @@ package list
 import "log"
 
 type Node struct {
-	Value string
+	Value []byte
 	Next  *Node
 	Prev  *Node
 }
 
 // linked list in redis stores string only
 type LinkedList struct {
+	mu     sync.RWMutex
 	head   *Node
 	tail   *Node
 	length int
@@ -28,12 +29,15 @@ func (ll *LinkedList) Len() int {
 }
 
 func (ll *LinkedList) InsertAt(pos int, val []byte) bool {
+	ll.mu.Lock()
+	defer ll.mu.Unlock()
+	
 	if pos < 0 || pos > ll.length {
 		log.Printf("invalid pos argument")
 		return false
 	}
 
-	newNode := &Node{Value: string(val)}
+	newNode := &Node{Value: val}
 
 	if ll.length == 0 {
 		ll.head = newNode
@@ -106,6 +110,9 @@ func (ll *LinkedList) RemoveAt(pos int) []byte {
 }
 
 func (ll *LinkedList) GetAt(pos int) []byte {
+	ll.mu.RLock()
+	defer ll.mu.RUnlock()
+	
 	// Handle negative indices
 	if pos < 0 {
 		pos = ll.length + pos // Convert to positive index

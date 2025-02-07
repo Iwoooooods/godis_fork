@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,6 +16,8 @@ type Connection struct {
 	// lock while server sending response
 	mu   sync.Mutex
 	flag uint
+	// atomic flag for connection state
+	closed atomic.Bool
 }
 
 // connPool is initialized when the package is loaded
@@ -34,6 +37,7 @@ func (c *Connection) RemoteAddr() string {
 }
 
 func (c *Connection) Close() error {
+	c.closed.Store(true)
 	// wait a few seconds for finishing sending data
 	if c.sending.WaitWithTimeout(10 * time.Second) {
 		log.Printf("closing connection timed out")
@@ -58,6 +62,9 @@ func NewConn(conn net.Conn) *Connection {
 }
 
 func (c *Connection) Write(b []byte) (int, error) {
+	if c.closed.Load() {
+		return 0, net.ErrClosed
+	}
 	if len(b) == 0 {
 		return 0, nil
 	}
