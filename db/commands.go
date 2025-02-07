@@ -16,11 +16,12 @@ var CommandMap = make(map[string]*cmd)
 const (
 	TypeString = iota
 	TypeList
+	TypeHash
 )
 
 type DataEntity struct {
 	Type  int
-	Value interface{}
+	Value any
 }
 
 type cmd struct {
@@ -102,4 +103,12 @@ func init() {
 	Register("LLEN", LLen)
 	Register("LINDEX", LIndex)
 	Register("LRANGE", LRange)
+
+	// hash commands
+	Register("HSET", HSet)
+	Register("HGET", HGet)
+	Register("HDEL", HDel)
+	Register("HGETALL", HGetAll)
+	Register("HEXISTS", HExists)
+	Register("HLEN", HLen)
 }

@@ -71,7 +71,6 @@ func (r *RedisHandler) HandleF(ctx context.Context, conn net.Conn) {
 				payload.Err == io.ErrUnexpectedEOF ||
 				strings.Contains(payload.Err.Error(), "use of closed network connection") {
 				// should close the connection
-				log.Printf("end of the connection")
 				return
 			}
 			// protocol error

@@ -6,9 +6,12 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"godis/lib/utils"
 )
 
 func init() {
@@ -511,5 +514,290 @@ func TestConcurrentListOperations(t *testing.T) {
 	expectedLen := numGoroutines * numOperations
 	if string(response) != fmt.Sprintf(":%d", expectedLen) {
 		t.Errorf("Expected length %d, got %s", expectedLen, string(response))
+	}
+}
+
+func TestHashCommands(t *testing.T) {
+	// Start server
+	addr := ":8080"
+	go Serve(addr, NewRedisHandler())
+	time.Sleep(time.Second) // Wait for server to start
+
+	// Connect to server
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		// Basic HSET operations
+		{
+			name:     "hset single field",
+			command:  "HSET user:1 name John\r\n",
+			expected: ":1\r\n",
+		},
+		{
+			name:     "hset multiple fields",
+			command:  "HSET user:1 age 30 city NewYork\r\n",
+			expected: ":2\r\n",
+		},
+		{
+			name:     "hset update existing field",
+			command:  "HSET user:1 name Jane\r\n",
+			expected: ":0\r\n",
+		},
+
+		// HGET operations
+		{
+			name:     "hget existing field",
+			command:  "HGET user:1 name\r\n",
+			expected: "$4\r\nJane\r\n",
+		},
+		{
+			name:     "hget non-existing field",
+			command:  "HGET user:1 nonexist\r\n",
+			expected: "$-1\r\n",
+		},
+		{
+			name:     "hget non-existing key",
+			command:  "HGET nonexist:1 field\r\n",
+			expected: "$-1\r\n",
+		},
+
+		// HDEL operations
+		{
+			name:     "hdel single existing field",
+			command:  "HDEL user:1 city\r\n",
+			expected: ":1\r\n",
+		},
+		{
+			name:     "hdel multiple fields",
+			command:  "HDEL user:1 name age nonexist\r\n",
+			expected: ":2\r\n",
+		},
+		{
+			name:     "hdel non-existing key",
+			command:  "HDEL nonexist:1 field\r\n",
+			expected: ":0\r\n",
+		},
+
+		// HLEN operations
+		{
+			name:     "hlen empty hash",
+			command:  "HLEN user:1\r\n",
+			expected: ":0\r\n",
+		},
+		{
+			name:     "hset for hlen",
+			command:  "HSET user:1 name John age 30\r\n",
+			expected: ":2\r\n",
+		},
+		{
+			name:     "hlen non-empty hash",
+			command:  "HLEN user:1\r\n",
+			expected: ":2\r\n",
+		},
+
+		// HEXISTS operations
+		{
+			name:     "hexists existing field",
+			command:  "HEXISTS user:1 name\r\n",
+			expected: ":1\r\n",
+		},
+		{
+			name:     "hexists non-existing field",
+			command:  "HEXISTS user:1 nonexist\r\n",
+			expected: ":0\r\n",
+		},
+
+		// HGETALL operations
+		{
+			name:     "hgetall with data",
+			command:  "HGETALL user:1\r\n",
+			expected: "*4\r\n$4\r\nname\r\n$4\r\nJohn\r\n$3\r\nage\r\n$2\r\n30\r\n",
+		},
+		{
+			name:     "hgetall empty hash",
+			command:  "HGETALL newuser\r\n",
+			expected: "*0\r\n",
+		},
+
+		// Error cases
+		{
+			name:     "hset wrong number of arguments",
+			command:  "HSET user:1 field\r\n",
+			expected: "-ERR wrong number of arguments for 'hset' command\r\n",
+		},
+		{
+			name:     "hget wrong number of arguments",
+			command:  "HGET user:1\r\n",
+			expected: "-ERR wrong number of arguments for 'hget' command\r\n",
+		},
+		{
+			name:     "set string for type checking",
+			command:  "SET wrongtype string\r\n",
+			expected: "+OK\r\n",
+		},
+		{
+			name:     "hget wrong type error",
+			command:  "HGET wrongtype field\r\n",
+			expected: "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n",
+		},
+	}
+
+	reader := bufio.NewReader(conn)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Send command
+			_, err = conn.Write([]byte(tt.command))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Read and parse response
+			response, err := utils.ParseRESP(reader)
+			if err != nil {
+				t.Fatalf("Failed to parse RESP: %v", err)
+			}
+
+			if response != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, response)
+			}
+
+			// For tests that need to check the actual values
+			if strings.HasPrefix(tt.name, "hlen") {
+				count, err := utils.ExtractInt(response)
+				if err != nil {
+					t.Fatalf("Failed to extract int: %v", err)
+				}
+				t.Logf("Hash length: %d", count)
+			}
+		})
+	}
+}
+
+func TestConcurrentHashOperations(t *testing.T) {
+	addr := ":8080"
+	go Serve(addr, NewRedisHandler())
+	time.Sleep(time.Second)
+
+	var wg sync.WaitGroup
+	numGoroutines := 100
+	numOperations := 10
+
+	// Create connection pool
+	conns := make([]net.Conn, numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		conns[i] = conn
+	}
+
+	// Run concurrent operations
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(connIndex int) {
+			defer wg.Done()
+			conn := conns[connIndex]
+			reader := bufio.NewReader(conn)
+
+			for j := 0; j < numOperations; j++ {
+				// Send HSET command directly without creating unused variables
+				command := fmt.Sprintf("HSET concurrent field_%d_%d value_%d_%d\r\n",
+					connIndex, j, connIndex, j)
+				_, err := conn.Write([]byte(command))
+				if err != nil {
+					t.Errorf("Failed to send command: %v", err)
+					return
+				}
+
+				// Read response
+				_, err = utils.ParseRESP(reader)
+				if err != nil {
+					t.Errorf("Failed to read response: %v", err)
+					return
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify final state
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	// Check hash length
+	reader := bufio.NewReader(conn)
+	_, err = conn.Write([]byte("HLEN concurrent\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	respLen, err := utils.ParseRESP(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedLen := numGoroutines * numOperations
+	if respLen != fmt.Sprintf(":%d\r\n", expectedLen) {
+		t.Errorf("Expected length :%d, got %s", expectedLen, respLen)
+	}
+
+	// Verify data consistency with HGETALL
+	_, err = conn.Write([]byte("HGETALL concurrent\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read and parse the entire HGETALL response
+	respHGetAll, err := utils.ParseRESP(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Parse the count from the multi-bulk response
+	count, err := strconv.Atoi(strings.TrimSuffix(respHGetAll[1:strings.Index(respHGetAll, "\r\n")], "\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if count != expectedLen*2 { // *2 because each entry has field and value
+		t.Errorf("Expected %d entries in HGETALL, got %d", expectedLen*2, count)
+	}
+
+	// Extract fields and values from the response
+	lines := strings.Split(respHGetAll, "\r\n")
+	fieldMap := make(map[string]string)
+
+	// Start from index 2 to skip the multi-bulk length line
+	// Process pairs of field/value
+	for i := 2; i < len(lines)-1; i += 4 {
+		// Skip the length indicators ($n) and get the actual values
+		field := lines[i]
+		value := lines[i+2]
+		fieldMap[field] = value
+	}
+
+	// Verify all fields exist with correct values
+	for i := 0; i < numGoroutines; i++ {
+		for j := 0; j < numOperations; j++ {
+			field := fmt.Sprintf("field_%d_%d", i, j)
+			expectedValue := fmt.Sprintf("value_%d_%d", i, j)
+			if value, exists := fieldMap[field]; !exists || value != expectedValue {
+				t.Errorf("Field %s: expected value %s, got %s", field, expectedValue, value)
+			}
+		}
 	}
 }
