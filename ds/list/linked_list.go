@@ -1,6 +1,8 @@
 package list
 
-import "log"
+import (
+	"log"
+)
 
 type Node struct {
 	Value []byte
@@ -10,7 +12,6 @@ type Node struct {
 
 // linked list in redis stores string only
 type LinkedList struct {
-	mu     sync.RWMutex
 	head   *Node
 	tail   *Node
 	length int
@@ -29,9 +30,7 @@ func (ll *LinkedList) Len() int {
 }
 
 func (ll *LinkedList) InsertAt(pos int, val []byte) bool {
-	ll.mu.Lock()
-	defer ll.mu.Unlock()
-	
+
 	if pos < 0 || pos > ll.length {
 		log.Printf("invalid pos argument")
 		return false
@@ -110,9 +109,7 @@ func (ll *LinkedList) RemoveAt(pos int) []byte {
 }
 
 func (ll *LinkedList) GetAt(pos int) []byte {
-	ll.mu.RLock()
-	defer ll.mu.RUnlock()
-	
+
 	// Handle negative indices
 	if pos < 0 {
 		pos = ll.length + pos // Convert to positive index
