@@ -111,4 +111,14 @@ func init() {
 	Register("HGETALL", HGetAll)
 	Register("HEXISTS", HExists)
 	Register("HLEN", HLen)
+
+	// set commands
+	Register("SADD", SAdd)
+	Register("SREM", SRem)
+	Register("SISMEMBER", SIsMember)
+	Register("SMEMBERS", SMembers)
+	Register("SCARD", SCard)
+	Register("SINTER", SInter)
+	Register("SUNION", SUnion)
+	Register("SDIFF", SDiff)
 }

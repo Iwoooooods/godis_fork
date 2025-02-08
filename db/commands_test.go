@@ -14,5 +14,4 @@ func TestRegisterCmds(t *testing.T) {
 	if CommandMap["get"].name != "get" {
 		t.Error("command name not match")
 	}
-	t.Logf("%v", CommandMap)
 }
