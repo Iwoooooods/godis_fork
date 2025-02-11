@@ -17,6 +17,7 @@ const (
 	TypeString = iota
 	TypeList
 	TypeHash
+	TypeSet
 )
 
 type DataEntity struct {

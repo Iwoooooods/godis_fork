@@ -6,8 +6,6 @@ import (
 	"godis/redis/protocol"
 )
 
-const TypeSet = 3
-
 func getAsSet(db *Redis, key string) (*set.ConcurrentSet, *protocol.StandardErrReply) {
 	entity, exists := db.data.Get(key)
 	if !exists {
