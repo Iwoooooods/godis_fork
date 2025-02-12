@@ -1,7 +1,7 @@
 package main
 
 import (
-	"godis/tcp/server"
+	"fmt"
 	"log"
 )
 
@@ -10,9 +10,10 @@ func init() {
 }
 
 func main() {
-	handler := server.NewEchoHandler()
+	// 	handler := server.NewEchoHandler()
 
-	if err := server.Serve(":8080", handler); err != nil {
-		log.Fatal(err)
-	}
+	// 	if err := server.Serve(":8080", handler); err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	fmt.Printf("%v", uint(1)<<uint(16))
 }
