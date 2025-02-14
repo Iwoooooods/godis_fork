@@ -1,220 +1,238 @@
 package zset
 
 import (
-	"fmt"
 	"math/bits"
-	"math/rand/v2"
+	"math/rand"
+	"strconv"
 )
-
-// skiplist is an improved version of
-// sorted linked list
-// it uses multi-level struture to
-// make express lane to fast search keys
-// rather than a linked list
-// a skip list is more like a table of
-// rows of linked list
-// 1 ----------------->6
-// 1 ------->3-------->6
-// 1 -> 2 -> 3 -> 4 -> 6
 
 const (
 	maxLevel = 16
 )
 
-type element struct {
-	score  float64
-	member string
+// Element is a key-score pair
+type Element struct {
+	Member string
+	Score  float64
 }
 
-type column struct {
-	element
-	backward *column // to go back to last column
-
-	// rows are the rows that the element occupy
-	// like above case, for element 3:
-	// rows: [row(0), row(1)]
-	rows []*row
+// Level aspect of a node
+type Level struct {
+	forward *node // forward node has greater score
+	span    int64
 }
 
-type row struct {
-	forward *column // used to continue to next  column
-	span    int64   // to jump to next column, you will cross [span] columns
+type node struct {
+	Element
+	backward *node
+	level    []*Level // level[0] is base level
 }
 
 type skiplist struct {
-	header *column // hear is a empty column that points to the first column
-	tail   *column // tail is used to traverse from behind
+	header *node
+	tail   *node
 	length int64
-	level  int16 // is the max level number of this skiplist
+	level  int16
 }
 
-func NewColumn(level int16, score float64, member string) *column {
-	col := &column{
-		element: element{
-			score:  score,
-			member: member,
+func makeNode(level int16, score float64, member string) *node {
+	n := &node{
+		Element: Element{
+			Score:  score,
+			Member: member,
 		},
-		rows: make([]*row, level),
+		level: make([]*Level, level),
 	}
-
-	for i := range col.rows {
-		col.rows[i] = new(row)
+	for i := range n.level {
+		n.level[i] = new(Level)
 	}
-
-	return col
+	return n
 }
 
-func NewSkipList() *skiplist {
+func makeSkiplist() *skiplist {
 	return &skiplist{
-		header: NewColumn(maxLevel, 0, ""),
 		level:  1,
+		header: makeNode(maxLevel, 0, ""),
 	}
 }
 
-// assigns a random level number for new node
-// doing so to make it
-// more likely to be assigned in lower levels
-// less likely to be assigned in upper levels
 func randomLevel() int16 {
 	total := uint64(1)<<uint64(maxLevel) - 1
 	k := rand.Uint64() % total
 	return maxLevel - int16(bits.Len64(k+1)) + 1
 }
 
-// 1 ----------------->6
-// 1 ------->3-------->6
-// 1 -> 2 -> 3 -> 4 -> 6
-func (sl *skiplist) Insert(score float64, member string) *column {
-	// first, to do decide the position of insertion
-	// keep track of the start point the interval in each level
-	// for example insert 5, starts: [4, 3, 1], here
-	// 4 means the new column should be inserted into the interval
-	// between 4 -> 6
-	startAts := make([]*column, maxLevel)
-	spans := make([]int64, maxLevel)
-	current := sl.header
+func (skiplist *skiplist) insert(member string, score float64) *node {
+	update := make([]*node, maxLevel) // link new node with node in `update`
+	rank := make([]int64, maxLevel)
 
-	for i := sl.level - 1; i >= 0; i-- {
-		// traverse forward until either:
-		// it reaches the end
-		// or the forward score is greater than input
-		rank := int64(0)
-		for current.rows[i].forward != nil &&
-			(current.rows[i].forward.score < score ||
-				(current.rows[i].forward.score == score &&
-					current.rows[i].forward.member < member)) {
-			// 'current' is now the column right before where we want to insert at level i
-			current = current.rows[i].forward
-			rank += current.rows[i].span
-		}
-		startAts[i] = current
-		spans[i] = rank
-	}
-
-	// second, flip coin to decide if we need
-	// to add the newLevel of the new column
-	newLevel := randomLevel()
-	if newLevel > sl.level {
-		for i := sl.level; i < newLevel; i++ {
-			startAts[i] = sl.header
-			spans[i] = 0
-		}
-		sl.level = newLevel
-	}
-
-	// last, make and insert the column into the table
-	// or say node into the linked list
-	column := NewColumn(newLevel, score, member)
-	for i := int16(0); i < newLevel; i++ {
-		column.rows[i].forward = startAts[i].rows[i].forward
-		startAts[i].rows[i].forward = column
-
-		column.rows[i].span = startAts[i].rows[i].span - (spans[0] - spans[i])
-		startAts[i].rows[i].span = (spans[0] - spans[i]) + 1
-	}
-
-	// fix backward pointers
-	if newLevel > 1 {
-		column.backward = startAts[0]
-		if column.rows[0].forward != nil {
-			column.rows[0].forward.backward = column
+	// find position to insert
+	node := skiplist.header
+	for i := skiplist.level - 1; i >= 0; i-- {
+		if i == skiplist.level-1 {
+			rank[i] = 0
 		} else {
-			sl.tail = column // inserted as the tail
+			rank[i] = rank[i+1] // store rank that is crossed to reach the insert position
 		}
-	} else if sl.tail == startAts[0] { // inserted at the tail
-		sl.tail = column
+		if node.level[i] != nil {
+			// traverse the skip list
+			for node.level[i].forward != nil &&
+				(node.level[i].forward.Score < score ||
+					(node.level[i].forward.Score == score && node.level[i].forward.Member < member)) { // same score, different key
+				rank[i] += node.level[i].span
+				node = node.level[i].forward
+			}
+		}
+		update[i] = node
 	}
 
-	// increment span for levels not touched
-	for i := newLevel; i < sl.level; i++ {
-		startAts[i].rows[i].span++
+	level := randomLevel()
+	// extend skiplist level
+	if level > skiplist.level {
+		for i := skiplist.level; i < level; i++ {
+			rank[i] = 0
+			update[i] = skiplist.header
+			update[i].level[i].span = skiplist.length
+		}
+		skiplist.level = level
 	}
 
-	sl.length++
-	return column
+	// make node and link into skiplist
+	node = makeNode(level, score, member)
+	for i := int16(0); i < level; i++ {
+		node.level[i].forward = update[i].level[i].forward
+		update[i].level[i].forward = node
+
+		// update span covered by update[i] as node is inserted here
+		node.level[i].span = update[i].level[i].span - (rank[0] - rank[i])
+		update[i].level[i].span = (rank[0] - rank[i]) + 1
+	}
+
+	// increment span for untouched levels
+	for i := level; i < skiplist.level; i++ {
+		update[i].level[i].span++
+	}
+
+	// set backward node
+	if update[0] == skiplist.header {
+		node.backward = nil
+	} else {
+		node.backward = update[0]
+	}
+	if node.level[0].forward != nil {
+		node.level[0].forward.backward = node
+	} else {
+		skiplist.tail = node
+	}
+	skiplist.length++
+	return node
 }
 
-func (sl *skiplist) Search(score float64, member string) *column {
-	// start from the header
-	// only go down the level when:
-	// either current forward to the tail
-	// or current forward has higher score
-	current := sl.header
-
-	for i := sl.level - 1; i >= 0; i-- {
-		for current.rows[i].forward != nil &&
-			(current.rows[i].forward.score < score ||
-				(current.rows[i].forward.score == score &&
-					current.rows[i].forward.member < member)) {
-			current = current.rows[i].forward
+/*
+ * param node: node to delete
+ * param update: backward node (of target)
+ */
+func (skiplist *skiplist) removeNode(node *node, update []*node) {
+	for i := int16(0); i < skiplist.level; i++ {
+		if update[i].level[i].forward == node {
+			update[i].level[i].span += node.level[i].span - 1
+			update[i].level[i].forward = node.level[i].forward
+		} else {
+			update[i].level[i].span--
 		}
 	}
+	if node.level[0].forward != nil {
+		node.level[0].forward.backward = node.backward
+	} else {
+		skiplist.tail = node.backward
+	}
+	for skiplist.level > 1 && skiplist.header.level[skiplist.level-1].forward == nil {
+		skiplist.level--
+	}
+	skiplist.length--
+}
 
-	current = current.rows[0].forward
-	if current != nil && current.member == member && current.score == score {
-		return current
+/*
+ * return: has found and removed node
+ */
+func (skiplist *skiplist) remove(member string, score float64) bool {
+	/*
+	 * find backward node (of target) or last node of each level
+	 * their forward need to be updated
+	 */
+	update := make([]*node, maxLevel)
+	node := skiplist.header
+	for i := skiplist.level - 1; i >= 0; i-- {
+		for node.level[i].forward != nil &&
+			(node.level[i].forward.Score < score ||
+				(node.level[i].forward.Score == score &&
+					node.level[i].forward.Member < member)) {
+			node = node.level[i].forward
+		}
+		update[i] = node
+	}
+	node = node.level[0].forward
+	if node != nil && score == node.Score && node.Member == member {
+		skiplist.removeNode(node, update)
+		// free x
+		return true
+	}
+	return false
+}
+
+/*
+ * return: 1 based rank, 0 means member not found
+ */
+func (skiplist *skiplist) getRank(member string, score float64) int64 {
+	var rank int64 = 0
+	x := skiplist.header
+	for i := skiplist.level - 1; i >= 0; i-- {
+		for x.level[i].forward != nil &&
+			(x.level[i].forward.Score < score ||
+				(x.level[i].forward.Score == score &&
+					x.level[i].forward.Member <= member)) {
+			rank += x.level[i].span
+			x = x.level[i].forward
+		}
+
+		/* x might be equal to zsl->header, so test if obj is non-NULL */
+		if x.Member == member {
+			return rank
+		}
+	}
+	return 0
+}
+
+/*
+ * 1-based rank
+ */
+func (skiplist *skiplist) getByRank(rank int64) *node {
+	var i int64 = 0
+	n := skiplist.header
+	// scan from top level
+	for level := skiplist.level - 1; level >= 0; level-- {
+		for n.level[level].forward != nil && (i+n.level[level].span) <= rank {
+			i += n.level[level].span
+			n = n.level[level].forward
+		}
+		if i == rank {
+			return n
+		}
 	}
 	return nil
 }
 
-func (sl *skiplist) String() string {
-	output := fmt.Sprintf("Skiplist Level: %d, Length: %d\n", sl.level, sl.length)
-	for level := int16(maxLevel - 1); level >= 0; level-- {
-		output += fmt.Sprintf("Level %2d: ", level)
-		current := sl.header
-		for current != nil {
-			if level < int16(len(current.rows)) {
-				if level == 0 { // Only print member at level 0
-					if current == sl.header {
-						output += "header"
-					} else {
-						output += fmt.Sprintf("[%s:%v]", current.member, current.score)
-					}
-				} else {
-					if current == sl.header {
-						output += "header"
-					} else {
-						output += fmt.Sprintf("[%s:%v]", current.member, current.score)
-					}
-				}
-
-				if level < int16(len(current.rows)) && current.rows[level] != nil {
-					if current.rows[level].forward != nil {
-						output += "-->"
-					} else {
-						output += "-->nil"
-					}
-					current = current.rows[level].forward
-				} else {
-					current = nil // Stop at this level if no more rows
-				}
-
-			} else {
-				current = nil // Should not happen, but for safety
-			}
-
+func (skiplist *skiplist) String() string {
+	var str string
+	str += "level " + strconv.Itoa(int(skiplist.level)) + " length " + strconv.Itoa(int(skiplist.length)) + "\n"
+	for i := int16(0); i < skiplist.level; i++ {
+		str += "Level " + strconv.Itoa(int(i)) + ": "
+		node := skiplist.header.level[i].forward
+		for node != nil {
+			str += "(" + node.Member + ":" + strconv.Itoa(int(node.Score)) + ")->"
+			node = node.level[i].forward
 		}
-		output += "\n"
+		str += "nil\n"
 	}
-	return output
+	return str
 }

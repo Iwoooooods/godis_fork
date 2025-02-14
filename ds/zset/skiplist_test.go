@@ -1,81 +1,137 @@
 package zset
 
 import (
+	"fmt"
 	"testing"
 )
 
-func TestRandomLevel(t *testing.T) {
-	numbers := make(map[int16]int, 100)
-	for i := 0; i < 100; i++ {
-		numbers[randomLevel()]++
+func TestSkiplistInsert(t *testing.T) {
+	skl := makeSkiplist()
+	skl.insert("a", 1.0)
+	skl.insert("b", 2.0)
+	skl.insert("c", 3.0)
+
+	if skl.length != 3 {
+		t.Errorf("Expected length 3, got %d", skl.length)
 	}
-	t.Logf("numbers: %v", numbers)
+
+	if skl.getRank("a", 1.0) != 1 {
+		t.Errorf("Expected rank of 'a' to be 1, got %d", skl.getRank("a", 1.0))
+	}
+	if skl.getRank("b", 2.0) != 2 {
+		t.Errorf("Expected rank of 'b' to be 2, got %d", skl.getRank("b", 2.0))
+	}
+	if skl.getRank("c", 3.0) != 3 {
+		t.Errorf("Expected rank of 'c' to be 3, got %d", skl.getRank("c", 3.0))
+	}
+
+	node1 := skl.getByRank(1)
+	if node1 == nil || node1.Member != "a" {
+		t.Errorf("Expected node at rank 1 to be 'a', got %+v", node1)
+	}
+	node2 := skl.getByRank(2)
+	if node2 == nil || node2.Member != "b" {
+		t.Errorf("Expected node at rank 2 to be 'b', got %+v", node2)
+	}
+	node3 := skl.getByRank(3)
+	if node3 == nil || node3.Member != "c" {
+		t.Errorf("Expected node at rank 3 to be 'c', got %+v", node3)
+	}
 }
 
-// ... existing code ...
+func TestSkiplistRemove(t *testing.T) {
+	skl := makeSkiplist()
+	skl.insert("a", 1.0)
+	skl.insert("b", 2.0)
+	skl.insert("c", 3.0)
 
-func TestSkiplistInsertAndSearch(t *testing.T) {
-	sl := NewSkipList()
-
-	// Test Insert
-	column1 := sl.Insert(1.0, "member1")
-	if column1 == nil {
-		t.Errorf("Insert(1.0, \"member1\") returned nil, expected a column")
-	}
-	if sl.length != 1 {
-		t.Errorf("skiplist length is %d, expected 1", sl.length)
+	if !skl.remove("b", 2.0) {
+		t.Errorf("Expected remove 'b' to return true")
 	}
 
-	column2 := sl.Insert(2.0, "member2")
-	if column2 == nil {
-		t.Errorf("Insert(2.0, \"member2\") returned nil, expected a column")
-	}
-	if sl.length != 2 {
-		t.Errorf("skiplist length is %d, expected 2", sl.length)
+	if skl.length != 2 {
+		t.Errorf("Expected length 2 after remove, got %d", skl.length)
 	}
 
-	column3 := sl.Insert(1.5, "member3")
-	if column3 == nil {
-		t.Errorf("Insert(1.5, \"member3\") returned nil, expected a column")
+	if skl.getRank("a", 1.0) != 1 {
+		t.Errorf("Expected rank of 'a' to be 1 after remove, got %d", skl.getRank("a", 1.0))
 	}
-	if sl.length != 3 {
-		t.Errorf("skiplist length is %d, expected 3", sl.length)
+	if skl.getRank("c", 3.0) != 2 {
+		t.Errorf("Expected rank of 'c' to be 2 after remove, got %d", skl.getRank("c", 3.0))
 	}
-
-	// Test Search - positive cases
-	foundColumn1 := sl.Search(1.0, "member1")
-	if foundColumn1 == nil {
-		t.Errorf("Search(1.0, \"member1\") returned nil, expected column1")
-	}
-	if foundColumn1 != column1 {
-		t.Errorf("Search(1.0, \"member1\") returned different column than inserted")
+	if skl.getRank("b", 2.0) != 0 {
+		t.Errorf("Expected rank of 'b' to be 0 after remove, got %d", skl.getRank("b", 2.0))
 	}
 
-	foundColumn2 := sl.Search(2.0, "member2")
-	if foundColumn2 == nil {
-		t.Errorf("Search(2.0, \"member2\") returned nil, expected column2")
+	node1 := skl.getByRank(1)
+	if node1 == nil || node1.Member != "a" {
+		t.Errorf("Expected node at rank 1 to be 'a' after remove, got %+v", node1)
 	}
-	if foundColumn2 != column2 {
-		t.Errorf("Search(2.0, \"member2\") returned different column than inserted")
+	node2 := skl.getByRank(2)
+	if node2 == nil || node2.Member != "c" {
+		t.Errorf("Expected node at rank 2 to be 'c' after remove, got %+v", node2)
 	}
-
-	foundColumn3 := sl.Search(1.5, "member3")
-	if foundColumn3 == nil {
-		t.Errorf("Search(1.5, \"member3\") returned nil, expected column3")
-	}
-	if foundColumn3 != column3 {
-		t.Errorf("Search(1.5, \"member3\") returned different column than inserted")
+	node3 := skl.getByRank(3)
+	if node3 != nil {
+		t.Errorf("Expected node at rank 3 to be nil after remove, got %+v", node3)
 	}
 
-	// Test Search - negative cases
-	notFoundColumn := sl.Search(3.0, "member4")
-	if notFoundColumn != nil {
-		t.Errorf("Search(3.0, \"member4\") returned %v, expected nil", notFoundColumn)
+	if skl.remove("d", 4.0) {
+		t.Errorf("Expected remove 'd' to return false as it doesn't exist")
+	}
+}
+
+func TestSkiplistGetRank(t *testing.T) {
+	skl := makeSkiplist()
+	skl.insert("a", 1.0)
+	skl.insert("b", 2.0)
+	skl.insert("c", 3.0)
+
+	if skl.getRank("a", 1.0) != 1 {
+		t.Errorf("Expected rank of 'a' to be 1, got %d", skl.getRank("a", 1.0))
+	}
+	if skl.getRank("b", 2.0) != 2 {
+		t.Errorf("Expected rank of 'b' to be 2, got %d", skl.getRank("b", 2.0))
+	}
+	if skl.getRank("c", 3.0) != 3 {
+		t.Errorf("Expected rank of 'c' to be 3, got %d", skl.getRank("c", 3.0))
+	}
+	if skl.getRank("d", 4.0) != 0 {
+		t.Errorf("Expected rank of 'd' to be 0, got %d", skl.getRank("d", 4.0))
+	}
+}
+
+func TestSkiplistGetByRank(t *testing.T) {
+	skl := makeSkiplist()
+	skl.insert("a", 1.0)
+	skl.insert("b", 2.0)
+	skl.insert("c", 3.0)
+
+	node1 := skl.getByRank(1)
+	if node1 == nil || node1.Member != "a" {
+		t.Errorf("Expected node at rank 1 to be 'a', got %+v", node1)
+	}
+	node2 := skl.getByRank(2)
+	if node2 == nil || node2.Member != "b" {
+		t.Errorf("Expected node at rank 2 to be 'b', got %+v", node2)
+	}
+	node3 := skl.getByRank(3)
+	if node3 == nil || node3.Member != "c" {
+		t.Errorf("Expected node at rank 3 to be 'c', got %+v", node3)
+	}
+	node4 := skl.getByRank(4)
+	if node4 != nil {
+		t.Errorf("Expected node at rank 4 to be nil, got %+v", node4)
 	}
 
-	notFoundColumn2 := sl.Search(1.0, "wrong_member")
-	if notFoundColumn2 != nil {
-		t.Errorf("Search(1.0, \"wrong_member\") returned %v, expected nil", notFoundColumn2)
-	}
-	t.Log(sl.String())
+}
+
+func TestSkiplistString(t *testing.T) {
+	skl := makeSkiplist()
+	skl.insert("a", 1.0)
+	skl.insert("b", 2.0)
+	skl.insert("c", 3.0)
+
+	str := skl.String()
+	fmt.Println(str)
 }
