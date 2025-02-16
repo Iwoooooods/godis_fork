@@ -801,3 +801,161 @@ func TestConcurrentHashOperations(t *testing.T) {
 		}
 	}
 }
+
+func TestZSetCommands(t *testing.T) {
+	// Start server
+	addr := ":8081" // Use a different port for zset tests to avoid conflicts
+	go Serve(addr, NewRedisHandler())
+	time.Sleep(time.Second) // Wait for server to start
+
+	// Connect to server
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	tests := []struct {
+		name     string
+		command  string
+		expected string
+	}{
+		{
+			name:     "zadd single element",
+			command:  "ZADD myzset 1 one\r\n",
+			expected: ":1\r\n",
+		},
+		{
+			name:     "zadd multiple elements",
+			command:  "ZADD myzset 2 two 3 three\r\n",
+			expected: ":2\r\n",
+		},
+		{
+			name:     "zrange all elements",
+			command:  "ZRANGE myzset 0 -1\r\n",
+			expected: "*6\r\n$3\r\none\r\n$1\r\n1\r\n$3\r\ntwo\r\n$1\r\n2\r\n$5\r\nthree\r\n$1\r\n3\r\n",
+		},
+		{
+			name:     "zrange with start stop",
+			command:  "ZRANGE myzset 1 2\r\n",
+			expected: "*4\r\n$3\r\ntwo\r\n$1\r\n2\r\n$5\r\nthree\r\n$1\r\n3\r\n",
+		},
+		{
+			name:     "zrevrange all elements",
+			command:  "ZREVRANGE myzset 0 -1\r\n",
+			expected: "*6\r\n$5\r\nthree\r\n$1\r\n3\r\n$3\r\ntwo\r\n$1\r\n2\r\n$3\r\none\r\n$1\r\n1\r\n",
+		},
+		{
+			name:     "zcard",
+			command:  "ZCARD myzset\r\n",
+			expected: ":3\r\n",
+		},
+		{
+			name:     "zscore existing member",
+			command:  "ZSCORE myzset two\r\n",
+			expected: "$1\r\n2\r\n",
+		},
+		{
+			name:     "zscore non-existing member",
+			command:  "ZSCORE myzset four\r\n",
+			expected: "$-1\r\n",
+		},
+		{
+			name:     "zrank existing member",
+			command:  "ZRANK myzset one\r\n",
+			expected: ":1\r\n",
+		},
+		{
+			name:     "zrank non-existing member",
+			command:  "ZRANK myzset four\r\n",
+			expected: "$-1\r\n",
+		},
+		{
+			name:     "zrevrank existing member",
+			command:  "ZREVRANK myzset two\r\n",
+			expected: ":2\r\n",
+		},
+		{
+			name:     "zrevrank non-existing member",
+			command:  "ZREVRANK myzset four\r\n",
+			expected: "$-1\r\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := conn.Write([]byte(tt.command))
+			if err != nil {
+				t.Fatalf("Error sending commands: %v", err)
+			}
+			actual, err := utils.ParseRESP(bufio.NewReader(conn))
+			if err != nil {
+				t.Fatalf("Failed to parse RESP: %v", err)
+			}
+			// t.Log(actual)
+			if !strings.HasPrefix(actual, tt.expected) {
+				t.Errorf("Command: %s, Expected prefix: %s, Actual: %s", tt.command, tt.expected, actual)
+			}
+		})
+	}
+}
+
+func TestConcurrentZSetCommands(t *testing.T) {
+	addr := ":8082"
+	go Serve(addr, NewRedisHandler())
+	time.Sleep(time.Second)
+
+	connCount := 10
+	var wg sync.WaitGroup
+	wg.Add(connCount)
+
+	for i := 0; i < connCount; i++ {
+		go func(connIndex int) {
+			defer wg.Done()
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Errorf("Connection error: %v", err)
+				return
+			}
+			defer conn.Close()
+
+			// Concurrent ZADD operations
+			for j := 0; j < 10; j++ {
+				cmd := fmt.Sprintf("ZADD concurrentZset %d \"member-%d-%d\"\r\n", j, connIndex, j)
+				fmt.Fprintf(conn, cmd)
+				_, err := bufio.NewReader(conn).ReadString('\n')
+				if err != nil {
+					t.Errorf("Error during ZADD: %v", err)
+					return
+				}
+			}
+
+			// Concurrent ZRANGE operation
+			fmt.Fprintf(conn, "ZRANGE concurrentZset 0 -1\r\n")
+			_, err = bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
+				t.Errorf("Error during ZRANGE: %v", err)
+				return
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Verify the final state of the zset (optional, can be added if needed)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("Final verification connection error: %v", err)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "ZCARD concurrentZset\r\n")
+	actualCard, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		t.Fatalf("Error during ZCARD verification: %v", err)
+	}
+	actualCard = strings.TrimSuffix(actualCard, "\r\n")
+	expectedCard := fmt.Sprintf(":%d", connCount*10) // Expected cardinality
+	if actualCard != expectedCard {
+		t.Errorf("Concurrent ZADD/ZRANGE, Expected ZCARD: %s, Actual ZCARD: %s", expectedCard, actualCard)
+	}
+}

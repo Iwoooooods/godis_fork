@@ -18,6 +18,7 @@ const (
 	TypeList
 	TypeHash
 	TypeSet
+	TypeZset
 )
 
 type DataEntity struct {
@@ -122,4 +123,13 @@ func init() {
 	Register("SINTER", SInter)
 	Register("SUNION", SUnion)
 	Register("SDIFF", SDiff)
+
+	Register("zadd", ZAdd)
+	Register("zrem", ZRemove)
+	Register("zrange", ZRange)
+	// Register("zrevrange", ZRevRange)
+	Register("zcard", ZCard)
+	Register("zscore", ZScore)
+	Register("zrank", ZRank)
+	Register("zrevrank", ZRevRank)
 }

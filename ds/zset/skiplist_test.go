@@ -6,7 +6,7 @@ import (
 )
 
 func TestSkiplistInsert(t *testing.T) {
-	skl := makeSkiplist()
+	skl := newSkiplist()
 	skl.insert("a", 1.0)
 	skl.insert("b", 2.0)
 	skl.insert("c", 3.0)
@@ -40,7 +40,7 @@ func TestSkiplistInsert(t *testing.T) {
 }
 
 func TestSkiplistRemove(t *testing.T) {
-	skl := makeSkiplist()
+	skl := newSkiplist()
 	skl.insert("a", 1.0)
 	skl.insert("b", 2.0)
 	skl.insert("c", 3.0)
@@ -82,7 +82,7 @@ func TestSkiplistRemove(t *testing.T) {
 }
 
 func TestSkiplistGetRank(t *testing.T) {
-	skl := makeSkiplist()
+	skl := newSkiplist()
 	skl.insert("a", 1.0)
 	skl.insert("b", 2.0)
 	skl.insert("c", 3.0)
@@ -102,7 +102,7 @@ func TestSkiplistGetRank(t *testing.T) {
 }
 
 func TestSkiplistGetByRank(t *testing.T) {
-	skl := makeSkiplist()
+	skl := newSkiplist()
 	skl.insert("a", 1.0)
 	skl.insert("b", 2.0)
 	skl.insert("c", 3.0)
@@ -127,11 +127,24 @@ func TestSkiplistGetByRank(t *testing.T) {
 }
 
 func TestSkiplistString(t *testing.T) {
-	skl := makeSkiplist()
+	skl := newSkiplist()
 	skl.insert("a", 1.0)
 	skl.insert("b", 2.0)
 	skl.insert("c", 3.0)
 
 	str := skl.String()
 	fmt.Println(str)
+}
+
+func TestForEachFunc(t *testing.T) {
+	skl := newSkiplist()
+	skl.insert("a", 1.0)
+	skl.insert("b", 2.0)
+	skl.insert("c", 3.0)
+	fmt.Println(skl.String())
+
+	skl.forEach(true, func(element *Element) bool {
+		t.Logf("member %s with score %f", element.Member, element.Score)
+		return true
+	})
 }
