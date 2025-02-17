@@ -28,17 +28,28 @@ type DataEntity struct {
 
 type cmd struct {
 	name     string
-	executor ExecF
+	executor Exec
 }
 
-// ExecF is the function for executing the corresponding command
-type ExecF func(db interfaces.DB, args [][]byte) protocol.Reply
+// Exec is the function for executing the corresponding command
+type Exec func(db interfaces.DB, args [][]byte) protocol.Reply
 
-func Register(cmdN string, cmdF ExecF) *cmd {
+func Register(cmdN string, cmdF Exec, ifPersist bool) *cmd {
 	name := strings.ToLower(cmdN)
+
+	executePersist := func(db interfaces.DB, args [][]byte) protocol.Reply {
+		reply := cmdF(db, args)
+		// if the server creahed during the execution
+		// the command then will not be appended to the file
+		if ifPersist {
+			// TODO: persist AOF
+		}
+		return reply
+	}
+
 	cmd := &cmd{
 		name:     name,
-		executor: cmdF,
+		executor: executePersist,
 	}
 	CommandMap[name] = cmd
 	return cmd
@@ -90,44 +101,44 @@ func Del(db interfaces.DB, args [][]byte) protocol.Reply {
 
 // init() will be called before main() after the package is loaded
 func init() {
-	Register("PING", Ping)
-	Register("DEL", Del)
+	Register("PING", Ping, true)
+	Register("DEL", Del, true)
 
 	// string commands
-	Register("SET", Set)
-	Register("GET", Get)
+	Register("SET", Set, true)
+	Register("GET", Get, true)
 
 	// list commands
-	Register("LPUSH", LPush)
-	Register("RPUSH", RPush)
-	Register("LPOP", LPop)
-	Register("RPOP", RPop)
-	Register("LLEN", LLen)
-	Register("LINDEX", LIndex)
-	Register("LRANGE", LRange)
+	Register("LPUSH", LPush, true)
+	Register("RPUSH", RPush, true)
+	Register("LPOP", LPop, true)
+	Register("RPOP", RPop, true)
+	Register("LLEN", LLen, true)
+	Register("LINDEX", LIndex, true)
+	Register("LRANGE", LRange, true)
 
 	// hash commands
-	Register("HSET", HSet)
-	Register("HGET", HGet)
-	Register("HDEL", HDel)
-	Register("HGETALL", HGetAll)
-	Register("HEXISTS", HExists)
-	Register("HLEN", HLen)
+	Register("HSET", HSet, true)
+	Register("HGET", HGet, true)
+	Register("HDEL", HDel, true)
+	Register("HGETALL", HGetAll, true)
+	Register("HEXISTS", HExists, true)
+	Register("HLEN", HLen, true)
 
 	// set commands
-	Register("SADD", SAdd)
-	Register("SREM", SRem)
-	Register("SISMEMBER", SIsMember)
-	Register("SMEMBERS", SMembers)
-	Register("SCARD", SCard)
-	Register("SINTER", SInter)
-	Register("SUNION", SUnion)
-	Register("SDIFF", SDiff)
+	Register("SADD", SAdd, true)
+	Register("SREM", SRem, true)
+	Register("SISMEMBER", SIsMember, true)
+	Register("SMEMBERS", SMembers, true)
+	Register("SCARD", SCard, true)
+	Register("SINTER", SInter, true)
+	Register("SUNION", SUnion, true)
+	Register("SDIFF", SDiff, true)
 
-	Register("ZADD", ZAdd)
-	Register("ZREM", ZRemove)
-	Register("ZRANGE", ZRange)
-	Register("ZCARD", ZCard)
-	Register("ZSCORE", ZScore)
-	Register("ZRANK", ZRank)
+	Register("ZADD", ZAdd, true)
+	Register("ZREM", ZRemove, true)
+	Register("ZRANGE", ZRange, true)
+	Register("ZCARD", ZCard, true)
+	Register("ZSCORE", ZScore, true)
+	Register("ZRANK", ZRank, true)
 }

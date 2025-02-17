@@ -16,7 +16,7 @@ func init() {
 
 func TestZSetRem(t *testing.T) {
 	// Start server
-	addr := ":8081"
+	addr := ":8080"
 	go server.Serve(addr, server.NewRedisHandler())
 	time.Sleep(time.Second) // Wait for server to start
 
