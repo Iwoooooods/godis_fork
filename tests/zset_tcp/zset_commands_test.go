@@ -112,7 +112,7 @@ func TestZSetRange(t *testing.T) {
 		{
 			name:     "zrange all elements by rank",
 			command:  "ZRANGE myzset 0 -1\r\n",
-			expected: "*6\r\n$3\r\none\r\n$1\r\n1\r\n$3\r\ntwo\r\n$1\r\n2\r\n$5\r\nthree\r\n$1\r\n3\r\n",
+			expected: "*3\r\n$3\r\none\r\n$3\r\ntwo\r\n$5\r\nthree\r\n",
 		},
 	}
 

@@ -124,12 +124,10 @@ func init() {
 	Register("SUNION", SUnion)
 	Register("SDIFF", SDiff)
 
-	Register("zadd", ZAdd)
-	Register("zrem", ZRemove)
-	Register("zrange", ZRange)
-	// Register("zrevrange", ZRevRange)
-	Register("zcard", ZCard)
-	Register("zscore", ZScore)
-	Register("zrank", ZRank)
-	Register("zrevrank", ZRevRank)
+	Register("ZADD", ZAdd)
+	Register("ZREM", ZRemove)
+	Register("ZRANGE", ZRange)
+	Register("ZCARD", ZCard)
+	Register("ZSCORE", ZScore)
+	Register("ZRANK", ZRank)
 }

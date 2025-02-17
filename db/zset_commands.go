@@ -49,7 +49,7 @@ func ZAdd(db interfaces.DB, args [][]byte) protocol.Reply {
 		scoreStr := string(args[i])
 		member := string(args[i+1])
 		score, err := strconv.ParseFloat(scoreStr, 64)
-		if err != nil {
+		if err != nil || score < 0 {
 			return protocol.MakeErrReply("ERR value is not a valid float")
 		}
 		if zSet.Add(member, score) {
@@ -136,52 +136,20 @@ func ZRange(db interfaces.DB, args [][]byte) protocol.Reply {
 
 	members := zSet.Range(start, stop, byScore)
 	result := make([][]byte, 0, len(members))
-	for _, member := range members {
-		scoreStr := strconv.FormatFloat(member.Score, 'g', 10, 64) // Format float to string
-		result = append(result, []byte(member.Member), []byte(scoreStr))
+
+	if byScore {
+		for _, member := range members {
+			scoreStr := strconv.FormatFloat(member.Score, 'g', 10, 64) // Format float to string
+			result = append(result, []byte(member.Member), []byte(scoreStr))
+		}
+		return protocol.MakeMultiBulkReply(result)
+	} else {
+		for _, member := range members {
+			result = append(result, []byte(member.Member))
+		}
+		return protocol.MakeMultiBulkReply(result)
 	}
-	return protocol.MakeMultiBulkReply(result)
 }
-
-// // ZRevRange returns a range of members in the sorted set stored at key, by index, in reverse order.
-// // The indexes start and stop are zero-based, with 0 being the first element, 1 being the next element and so on.
-// // They are inclusive ranges, so both start and stop are included in the returned elements.
-// func ZRevRange(db interfaces.DB, args [][]byte) protocol.Reply {
-// 	if len(args) != 3 {
-// 		return protocol.MakeErrReply("ERR wrong number of arguments for 'zrevrange' command")
-// 	}
-
-// 	key := string(args[0])
-// 	startStr := string(args[1])
-// 	stopStr := string(args[2])
-
-// 	start, err := strconv.ParseInt(startStr, 10, 64)
-// 	if err != nil {
-// 		return protocol.MakeErrReply("ERR value is not an integer or out of range")
-// 	}
-// 	stop, err := strconv.ParseInt(stopStr, 10, 64)
-// 	if err != nil {
-// 		return protocol.MakeErrReply("ERR value is not an integer or out of range")
-// 	}
-
-// 	redis, _ := db.(*Redis)
-// 	zSet, errReply := getAsZSet(redis, key)
-// 	if errReply != nil {
-// 		return errReply
-// 	}
-
-// 	if zSet.Len() == 0 {
-// 		return protocol.MakeEmptyMultiBulkReply()
-// 	}
-
-// 	members := zSet.RevRange(start, stop)
-// 	result := make([][]byte, 0, len(members))
-// 	for _, member := range members {
-// 		scoreStr := strconv.FormatFloat(member.Score, 'g', 10, 64)
-// 		result = append(result, []byte(member.Member), []byte(scoreStr))
-// 	}
-// 	return protocol.MakeMultiBulkReply(result)
-// }
 
 // ZCard returns the sorted set cardinality (number of elements) of the sorted set stored at key.
 func ZCard(db interfaces.DB, args [][]byte) protocol.Reply {
@@ -249,32 +217,4 @@ func ZRank(db interfaces.DB, args [][]byte) protocol.Reply {
 		return protocol.MakeNullBulkReply() // Member not found
 	}
 	return protocol.MakeIntReply(rank)
-}
-
-// ZRevRank returns the rank of member in the sorted set stored at key, with scores ordered from high to low.
-// Rank is 0-based.
-func ZRevRank(db interfaces.DB, args [][]byte) protocol.Reply {
-	if len(args) != 2 {
-		return protocol.MakeErrReply("ERR wrong number of arguments for 'zrevrank' command")
-	}
-
-	key := string(args[0])
-	member := string(args[1])
-
-	redis, _ := db.(*Redis)
-	zSet, errReply := getAsZSet(redis, key)
-	if errReply != nil {
-		return errReply
-	}
-
-	_, ok := zSet.Score(member)
-	if !ok {
-		return protocol.MakeEmptyMultiBulkReply()
-	}
-	rank := zSet.GetRank(member, false)
-	revRank := zSet.Len() - rank - 1
-	if revRank == 0 {
-		return protocol.MakeNullBulkReply() // Member not found
-	}
-	return protocol.MakeIntReply(revRank)
 }
